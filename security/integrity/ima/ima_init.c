@@ -12,6 +12,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/list.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/err.h>
@@ -143,6 +144,8 @@ int __init ima_init(void)
 		return rc;
 
 	ima_init_policy();
+
+	ima_policy_measure("policy_init");
 
 	rc = ima_fs_init();
 	if (rc != 0)

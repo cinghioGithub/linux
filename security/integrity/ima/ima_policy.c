@@ -1054,6 +1054,8 @@ void ima_update_policy(void)
 
 	/* Custom IMA policy has been loaded */
 	ima_process_queued_keys();
+
+	ima_policy_measure("policy_update");
 }
 
 /* Keep the enumeration in sync with the policy_tokens! */
@@ -2329,3 +2331,26 @@ bool ima_appraise_signature(enum kernel_read_file_id id)
 	return found;
 }
 #endif /* CONFIG_IMA_APPRAISE && CONFIG_INTEGRITY_TRUSTED_KEYRING */
+
+void ima_policy_measure(char* event_name) {
+	struct ima_rule_entry *entry, *e;
+	struct list_head *ima_rules_tmp;
+	struct seq_file file;
+	int result;
+
+	file.buf = vmalloc(2048);
+	file.read_pos = 0;
+	file.size = 2048;
+	file.count = 0;
+
+	rcu_read_lock();
+	ima_rules_tmp = rcu_dereference(ima_rules);
+	list_for_each_entry_rcu(entry, ima_rules_tmp, list) {
+		ima_policy_show(&file, entry);
+	}
+	rcu_read_unlock();
+
+	ima_measure_critical_data("ima_policy", event_name,
+				  file.buf, file.count, false,
+				  NULL, 0);
+}

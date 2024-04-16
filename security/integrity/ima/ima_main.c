@@ -972,6 +972,13 @@ int process_buffer_measurement(struct mnt_idmap *idmap,
 		action = ima_get_action(idmap, inode, current_cred(),
 					secid, 0, func, &pcr, &template,
 					func_data, NULL);
+
+		/* force ima policy measurement */
+		if (!strcmp(func_data, "ima_policy")) {
+			action = 0;
+			action |= IMA_MEASURE;
+		}
+
 		if (!(action & IMA_MEASURE) && !digest)
 			return -ENOENT;
 	}
