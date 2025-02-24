@@ -309,6 +309,9 @@ static const struct file_operations ima_ascii_measurements_ops = {
 	.release = seq_release,
 };
 
+static size_t text_policy_len;
+bool override_ima_policy;
+
 static ssize_t ima_read_policy(char *path)
 {
 	void *data = NULL;
@@ -383,6 +386,7 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 		result = -EACCES;
 	} else {
 		result = ima_parse_add_rule(data);
+		text_policy_len += (result + 1);
 	}
 	mutex_unlock(&ima_write_mutex);
 out_free:
@@ -532,6 +536,10 @@ static int ima_release_policy(struct inode *inode, struct file *file)
 	}
 
 	ima_update_policy();
+	if (unlikely(override_ima_policy && text_policy_len)) {
+		ima_measure_override_policy(text_policy_len);
+		override_ima_policy = false;
+	}
 #if !defined(CONFIG_IMA_WRITE_POLICY) && !defined(CONFIG_IMA_READ_POLICY)
 	securityfs_remove(ima_policy);
 	ima_policy = NULL;
@@ -557,6 +565,9 @@ int __init ima_fs_init(void)
 
 	ascii_securityfs_measurement_lists = NULL;
 	binary_securityfs_measurement_lists = NULL;
+
+	text_policy_len = 0;
+	override_ima_policy = false;
 
 	ima_dir = securityfs_create_dir("ima", integrity_dir);
 	if (IS_ERR(ima_dir))

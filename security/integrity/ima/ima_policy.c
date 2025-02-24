@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/rculist.h>
 #include <linux/seq_file.h>
+#include <linux/vmalloc.h>
 #include <linux/ima.h>
 
 #include "ima.h"
@@ -1044,6 +1045,8 @@ void ima_update_policy(void)
 	if (ima_rules != (struct list_head __rcu *)policy) {
 		ima_policy_flag = 0;
 
+		override_ima_policy = true;
+
 		rcu_assign_pointer(ima_rules, policy);
 		/*
 		 * IMA architecture specific policy rules are specified
@@ -1982,7 +1985,6 @@ const char *const func_tokens[] = {
 	__ima_hooks(__ima_hook_stringify)
 };
 
-#ifdef	CONFIG_IMA_READ_POLICY
 enum {
 	mask_exec = 0, mask_write, mask_read, mask_append
 };
@@ -1994,6 +1996,7 @@ static const char *const mask_tokens[] = {
 	"^MAY_APPEND"
 };
 
+#ifdef	CONFIG_IMA_READ_POLICY
 void *ima_policy_start(struct seq_file *m, loff_t *pos)
 {
 	loff_t l = *pos;
@@ -2028,6 +2031,7 @@ void *ima_policy_next(struct seq_file *m, void *v, loff_t *pos)
 void ima_policy_stop(struct seq_file *m, void *v)
 {
 }
+#endif	/* CONFIG_IMA_READ_POLICY */
 
 #define pt(token)	policy_tokens[token].pattern
 #define mt(token)	mask_tokens[token]
@@ -2276,7 +2280,6 @@ int ima_policy_show(struct seq_file *m, void *v)
 	seq_puts(m, "\n");
 	return 0;
 }
-#endif	/* CONFIG_IMA_READ_POLICY */
 
 #if defined(CONFIG_IMA_APPRAISE) && defined(CONFIG_INTEGRITY_TRUSTED_KEYRING)
 /*
@@ -2333,3 +2336,77 @@ bool ima_appraise_signature(enum kernel_read_file_id id)
 	return found;
 }
 #endif /* CONFIG_IMA_APPRAISE && CONFIG_INTEGRITY_TRUSTED_KEYRING */
+
+void ima_measure_override_policy(size_t file_len)
+{
+	struct ima_iint_cache iint = {};
+	const char event_name[] = "ima-policy-override";
+	struct ima_event_data event_data = {.iint = &iint,
+					    .filename = event_name};
+	struct ima_max_digest_data hash;
+	struct ima_digest_data *hash_hdr = container_of(&hash.hdr,
+						struct ima_digest_data, hdr);
+	static const char op[] = "measure_ima_policy_override";
+	struct ima_template_entry *entry = NULL;
+	static char *audit_cause = "ENOMEM";
+	struct ima_template_desc *template;
+	struct ima_rule_entry *rule_entry;
+	struct list_head *ima_rules_tmp;
+	struct seq_file file;
+	int result = -ENOMEM;
+	int violation = 0;
+
+	file.buf = vmalloc(file_len);
+	if (!file.buf)
+		goto out;
+
+	file.read_pos = 0;
+	file.size = file_len;
+	file.count = 0;
+
+	rcu_read_lock();
+	ima_rules_tmp = rcu_dereference(ima_rules);
+	list_for_each_entry_rcu(rule_entry, ima_rules_tmp, list) {
+		ima_policy_show(&file, rule_entry);
+	}
+	rcu_read_unlock();
+
+	event_data.buf = file.buf;
+	event_data.buf_len = file.count;
+
+	template = ima_template_desc_buf();
+	if (!template) {
+		audit_cause = "ima_template_desc_buf";
+		goto out_free;
+	}
+
+	iint.ima_hash = hash_hdr;
+	iint.ima_hash->algo = ima_hash_algo;
+	iint.ima_hash->length = hash_digest_size[ima_hash_algo];
+
+	result = ima_calc_buffer_hash(file.buf, file.count, iint.ima_hash);
+	if (result < 0) {
+		audit_cause = "hashing_error";
+		goto out_free;
+	}
+
+	result = ima_alloc_init_template(&event_data, &entry, template);
+	if (result < 0) {
+		audit_cause = "alloc_entry";
+		goto out_free;
+	}
+
+	result = ima_store_template(entry, violation, NULL, event_data.buf,
+				    CONFIG_IMA_MEASURE_PCR_IDX);
+	if (result < 0) {
+		audit_cause = "store_entry";
+		ima_free_template_entry(entry);
+	}
+
+out_free:
+	kvfree(file.buf);
+out:
+	if (result < 0)
+		integrity_audit_msg(AUDIT_INTEGRITY_PCR, NULL, event_name,
+				    op, audit_cause, result, 1);
+}
