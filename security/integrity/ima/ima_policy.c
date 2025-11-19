@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/rculist.h>
 #include <linux/seq_file.h>
+#include <linux/vmalloc.h>
 #include <linux/ima.h>
 
 #include "ima.h"
@@ -921,6 +922,7 @@ static int __init ima_init_arch_policy(void)
 		int result;
 
 		result = strscpy(rule, *rules, sizeof(rule));
+		text_policy_len += strlen(rule) + 1;
 
 		INIT_LIST_HEAD(&arch_policy_entry[i].list);
 		result = ima_parse_rule(rule, &arch_policy_entry[i]);
@@ -944,6 +946,7 @@ static int __init ima_init_arch_policy(void)
 void __init ima_init_policy(void)
 {
 	int build_appraise_entries, arch_entries;
+	size_t loaded_policy_len;
 
 	/* if !ima_policy, we load NO default rules */
 	if (ima_policy)
@@ -1015,6 +1018,11 @@ void __init ima_init_policy(void)
 	atomic_set(&ima_setxattr_allowed_hash_algorithms, 0);
 
 	ima_update_policy_flags();
+
+	text_policy_len = 0;
+	loaded_policy_len = ima_policy_text_len();
+	if (loaded_policy_len > 0)
+		text_policy_len += loaded_policy_len;
 }
 
 /* Make sure we have a valid policy, at least containing some rules. */
@@ -1983,7 +1991,6 @@ const char *const func_tokens[] = {
 	__ima_hooks(__ima_hook_stringify)
 };
 
-#ifdef	CONFIG_IMA_READ_POLICY
 enum {
 	mask_exec = 0, mask_write, mask_read, mask_append
 };
@@ -2277,7 +2284,6 @@ int ima_policy_show(struct seq_file *m, void *v)
 	seq_puts(m, "\n");
 	return 0;
 }
-#endif	/* CONFIG_IMA_READ_POLICY */
 
 #if defined(CONFIG_IMA_APPRAISE) && defined(CONFIG_INTEGRITY_TRUSTED_KEYRING)
 /*
@@ -2334,3 +2340,68 @@ bool ima_appraise_signature(enum kernel_read_file_id id)
 	return found;
 }
 #endif /* CONFIG_IMA_APPRAISE && CONFIG_INTEGRITY_TRUSTED_KEYRING */
+
+void ima_measure_loaded_policy(size_t file_len)
+{
+	const char event_name[] = "ima_policy_loaded";
+	static const char op[] = "measure_loaded_ima_policy";
+	static char *audit_cause = "ENOMEM";
+	struct ima_rule_entry *rule_entry;
+	struct list_head *ima_rules_tmp;
+	struct seq_file file;
+	int result = -ENOMEM;
+
+	file.buf = vmalloc(file_len);
+	if (!file.buf)
+		goto out;
+
+	file.read_pos = 0;
+	file.size = file_len;
+	file.count = 0;
+
+	rcu_read_lock();
+	ima_rules_tmp = rcu_dereference(ima_rules);
+	list_for_each_entry_rcu(rule_entry, ima_rules_tmp, list) {
+		ima_policy_show(&file, rule_entry);
+	}
+	rcu_read_unlock();
+
+	ima_measure_critical_data("ima_policy", event_name, file.buf,
+				  file.count, false, NULL, 0);
+
+out_free:
+	kvfree(file.buf);
+out:
+	if (result < 0)
+		integrity_audit_msg(AUDIT_INTEGRITY_PCR, NULL, event_name,
+				    op, audit_cause, result, 1);
+}
+
+size_t __init ima_policy_text_len(void)
+{
+	size_t size = 0;
+	struct seq_file file;
+	struct ima_rule_entry *entry;
+	struct list_head *ima_rules_tmp;
+	
+	file.buf = vmalloc(128);
+	if (!file.buf)
+		return -ENOMEM;
+
+	file.read_pos = 0;
+	file.size = 128;
+	file.count = 0;
+
+	rcu_read_lock();
+	ima_rules_tmp = rcu_dereference(ima_rules);
+	list_for_each_entry_rcu(entry, ima_rules_tmp, list) {
+		ima_policy_show(&file, entry);
+		size += file.count;
+		file.count = 0;
+	}
+	rcu_read_unlock();
+
+	kvfree(file.buf);
+
+	return size;
+}

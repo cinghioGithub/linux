@@ -289,11 +289,13 @@ static const struct file_operations ima_ascii_measurements_ops = {
 	.release = seq_release,
 };
 
+size_t text_policy_len;
+
 static ssize_t ima_read_policy(char *path)
 {
 	void *data = NULL;
 	char *datap;
-	size_t size;
+	size_t size, policy_size;
 	int rc, pathlen = strlen(path);
 
 	char *p;
@@ -317,16 +319,19 @@ static ssize_t ima_read_policy(char *path)
 		rc = ima_parse_add_rule(p);
 		if (rc < 0)
 			break;
+		policy_size += (rc + 1);
 		size -= rc;
 	}
 
 	vfree(data);
-	if (rc < 0)
+	if (rc < 0) {
 		return rc;
-	else if (size)
+	} else if (size) {
 		return -EINVAL;
-	else
+	} else {
+		text_policy_len += policy_size;
 		return pathlen;
+	}
 }
 
 static ssize_t ima_write_policy(struct file *file, const char __user *buf,
@@ -334,6 +339,7 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 {
 	char *data;
 	ssize_t result;
+	struct file *tmp_file;
 
 	if (datalen >= PAGE_SIZE)
 		datalen = PAGE_SIZE - 1;
@@ -363,6 +369,7 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 		result = -EACCES;
 	} else {
 		result = ima_parse_add_rule(data);
+		text_policy_len += (result + 1);
 	}
 	mutex_unlock(&ima_write_mutex);
 out_free:
@@ -476,6 +483,7 @@ static int ima_release_policy(struct inode *inode, struct file *file)
 	}
 
 	ima_update_policy();
+	ima_measure_loaded_policy(text_policy_len);
 #if !defined(CONFIG_IMA_WRITE_POLICY) && !defined(CONFIG_IMA_READ_POLICY)
 	securityfs_remove(file->f_path.dentry);
 #elif defined(CONFIG_IMA_WRITE_POLICY)
