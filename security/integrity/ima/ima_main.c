@@ -28,6 +28,8 @@
 #include <linux/iversion.h>
 #include <linux/evm.h>
 #include <linux/crash_dump.h>
+#include <linux/vmalloc.h>
+#include <linux/shmem_fs.h>
 
 #include "ima.h"
 
@@ -233,7 +235,7 @@ static void ima_file_free(struct file *file)
 	ima_check_last_writer(iint, inode, file);
 }
 
-static int process_measurement(struct file *file, const struct cred *cred,
+int process_measurement(struct file *file, const struct cred *cred,
 			       struct lsm_prop *prop, char *buf, loff_t size,
 			       int mask, enum ima_hooks func)
 {
@@ -984,6 +986,52 @@ static int ima_post_load_data(char *buf, loff_t size,
 					  buf, size, true, NULL, 0);
 
 	return 0;
+}
+
+/**
+ * ima_measure_policy_write - Measure the policy write buffer
+ * @buf: pointer to the buffer containing the policy write data
+ * @size: size of the buffer
+ *
+ * Measure the policy write buffer based on the IMA policy.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int ima_measure_policy_write(char *buf, size_t size)
+{
+	struct file *policy_file = NULL;
+	const char prefix[] = "ima_policy_write:";
+	const size_t prefix_len = strlen(prefix);
+	struct lsm_prop prop;
+	int ret = 0;
+
+	char *file_name = vmalloc(2 * size + prefix_len);
+	if (!file_name) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	bin2hex(file_name + prefix_len, buf, size);
+	memcpy(file_name, prefix, prefix_len);
+
+	policy_file = shmem_kernel_file_setup(file_name, 0, 0);
+	if (IS_ERR(policy_file)) {
+		pr_err("Unable to create policy file (%ld)\n",
+			PTR_ERR(policy_file));
+
+		ret = PTR_ERR(policy_file);
+		goto out_file_name;
+	}
+
+	security_current_getlsmprop_subj(&prop);
+	ret = process_measurement(policy_file, current_cred(), &prop, buf, size,
+				  MAY_READ, POLICY_CHECK);
+
+	fput(policy_file);
+out_file_name:
+	vfree(file_name);
+out:
+	return ret;
 }
 
 /**

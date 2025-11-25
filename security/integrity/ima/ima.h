@@ -395,6 +395,9 @@ void ima_store_measurement(struct ima_iint_cache *iint, struct file *file,
 			   struct evm_ima_xattr_data *xattr_value,
 			   int xattr_len, const struct modsig *modsig, int pcr,
 			   struct ima_template_desc *template_desc);
+int process_measurement(struct file *file, const struct cred *cred,
+			       struct lsm_prop *prop, char *buf, loff_t size,
+			       int mask, enum ima_hooks func);
 int process_buffer_measurement(struct mnt_idmap *idmap,
 			       struct inode *inode, const void *buf, int size,
 			       const char *eventname, enum ima_hooks func,
@@ -429,6 +432,7 @@ void ima_policy_stop(struct seq_file *m, void *v);
 int ima_policy_show(struct seq_file *m, void *v);
 void ima_measure_loaded_policy(size_t file_len);
 size_t __init ima_policy_text_len(void);
+int ima_measure_policy_write(char *buf, size_t size);
 
 /* Appraise integrity measurements */
 #define IMA_APPRAISE_ENFORCE	0x01

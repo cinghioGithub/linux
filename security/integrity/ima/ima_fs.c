@@ -339,7 +339,6 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 {
 	char *data;
 	ssize_t result;
-	struct file *tmp_file;
 
 	if (datalen >= PAGE_SIZE)
 		datalen = PAGE_SIZE - 1;
@@ -368,10 +367,14 @@ static ssize_t ima_write_policy(struct file *file, const char __user *buf,
 				    1, 0);
 		result = -EACCES;
 	} else {
+		ima_measure_policy_write(data, datalen);
 		result = ima_parse_add_rule(data);
-		text_policy_len += (result + 1);
 	}
 	mutex_unlock(&ima_write_mutex);
+
+	if (result > 0) {
+		text_policy_len += (result + 1);
+	}
 out_free:
 	kfree(data);
 out:

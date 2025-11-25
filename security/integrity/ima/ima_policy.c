@@ -2369,7 +2369,6 @@ void ima_measure_loaded_policy(size_t file_len)
 	ima_measure_critical_data("ima_policy", event_name, file.buf,
 				  file.count, false, NULL, 0);
 
-out_free:
 	kvfree(file.buf);
 out:
 	if (result < 0)
