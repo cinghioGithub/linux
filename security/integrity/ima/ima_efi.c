@@ -62,6 +62,7 @@ static const char * const sb_arch_rules[] = {
 	"appraise func=POLICY_CHECK appraise_type=imasig",
 #endif
 	"measure func=MODULE_CHECK",
+	"measure func=CRITICAL_DATA label=ima_policy",
 	NULL
 };
 
