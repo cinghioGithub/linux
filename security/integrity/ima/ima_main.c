@@ -28,6 +28,7 @@
 #include <linux/iversion.h>
 #include <linux/evm.h>
 #include <linux/crash_dump.h>
+#include <linux/shmem_fs.h>
 
 #include "ima.h"
 
@@ -984,6 +985,43 @@ static int ima_post_load_data(char *buf, loff_t size,
 					  buf, size, true, NULL, 0);
 
 	return 0;
+}
+
+/**
+ * ima_measure_policy_write - Measure the policy write buffer
+ * @buf: pointer to the buffer containing the policy write data
+ * @size: size of the buffer
+ *
+ * Measure the buffer sent to the IMA policy securityfs file.
+ *
+ * Return 0 on success, a negative value otherwise.
+ */
+int ima_measure_policy_write(char *buf, size_t size)
+{
+	static const char op[] = "measure_ima_policy_write";
+	const char *file_name = "ima_write_policy_buffer";
+	static char *audit_cause = "ENOMEM";
+	struct file *policy_file = NULL;
+	struct lsm_prop prop;
+	int ret = 0;
+
+	policy_file = shmem_kernel_file_setup(file_name, 0, 0);
+	if (IS_ERR(policy_file)) {
+		ret = PTR_ERR(policy_file);
+		audit_cause = "alloc_file";
+		integrity_audit_msg(AUDIT_INTEGRITY_PCR, NULL, "ima_policy_write",
+				    op, audit_cause, ret, 1);
+		goto out;
+	}
+
+	security_current_getlsmprop_subj(&prop);
+
+	ret = process_measurement(policy_file, current_cred(), &prop, buf, size,
+				  MAY_READ, POLICY_CHECK);
+	fput(policy_file);
+
+out:
+	return ret;
 }
 
 /**
