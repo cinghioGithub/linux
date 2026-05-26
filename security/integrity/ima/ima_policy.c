@@ -541,6 +541,8 @@ static bool ima_match_rule_data(struct ima_rule_entry *rule,
 
 		opt_list = rule->label;
 		break;
+	case POLICY_CHECK:
+		return true;
 	default:
 		return false;
 	}
@@ -589,6 +591,7 @@ static bool ima_match_rules(struct ima_rule_entry *rule,
 	switch (func) {
 	case KEY_CHECK:
 	case CRITICAL_DATA:
+	case POLICY_CHECK:
 		return ((rule->func == func) &&
 			ima_match_rule_data(rule, func_data, cred));
 	default:

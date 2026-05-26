@@ -1204,6 +1204,25 @@ int ima_measure_critical_data(const char *event_label,
 }
 EXPORT_SYMBOL_GPL(ima_measure_critical_data);
 
+/**
+ * ima_measure_policy_buf - Measure the policy write buffer
+ * @buf: pointer to the buffer containing the policy write data
+ * @buf_len: size of the buffer
+ *
+ * Measure the buffer sent to the IMA policy securityfs file.
+ *
+ * Return 0 on success, a negative value otherwise.
+ */
+int ima_measure_policy_buf(const char *buf, size_t buf_len)
+{
+	if (!buf || !buf_len)
+		return -ENOPARAM;
+
+	return process_buffer_measurement(&nop_mnt_idmap, NULL, buf, buf_len,
+					 "ima_write_policy_buf", POLICY_CHECK,
+					 0, NULL, false, NULL, 0);
+}
+
 #ifdef CONFIG_INTEGRITY_ASYMMETRIC_KEYS
 
 /**
