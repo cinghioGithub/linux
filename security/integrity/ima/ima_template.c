@@ -416,6 +416,7 @@ int ima_restore_measurement_list(loff_t size, void *buf)
 {
 	char template_name[MAX_TEMPLATE_NAME_LEN];
 	unsigned char zero[TPM_DIGEST_SIZE] = { 0 };
+	bool is_violation;
 
 	struct ima_kexec_hdr *khdr = buf;
 	struct ima_field_data hdr[HDR__LAST] = {
@@ -462,6 +463,7 @@ int ima_restore_measurement_list(loff_t size, void *buf)
 	bufendp = buf + khdr->buffer_size;
 	while ((bufp < bufendp) && (count++ < khdr->count)) {
 		int enforce_mask = ENFORCE_FIELDS;
+		is_violation = false;
 
 		enforce_mask |= (count == khdr->count) ? ENFORCE_BUFEND : 0;
 		ret = ima_parse_buf(bufp, bufendp, &bufp, HDR__LAST, hdr, NULL,
@@ -515,10 +517,30 @@ int ima_restore_measurement_list(loff_t size, void *buf)
 		if (ret < 0)
 			break;
 
-		if (memcmp(hdr[HDR_DIGEST].data, zero, sizeof(zero))) {
-			ret = ima_calc_field_array_hash(
-						&entry->template_data[0],
-						entry);
+		/* Verify if a zero template data hash corresponds to a violation */
+		if (!memcmp(hdr[HDR_DIGEST].data, zero, sizeof(zero))) {
+			struct ima_template_entry temp_entry;
+
+			temp_entry.template_desc = entry->template_desc;
+			temp_entry.digests = entry->digests;
+
+			/* Check only sha1 which is the only one marshaled */
+			ret = ima_calc_field_array_hash_tfm(&entry->template_data[0],
+							    &temp_entry, ima_sha1_idx);
+			if (ret)
+				break;
+
+			if (memcmp(temp_entry.digests[ima_sha1_idx].digest, zero, sizeof(zero))) {
+				memset(temp_entry.digests[ima_sha1_idx].digest, 0,
+				       sizeof(temp_entry.digests[ima_sha1_idx].digest));
+				atomic_long_inc(&ima_htable.violations);
+				is_violation = true;
+			}
+		}
+
+		if(!is_violation) {
+			ret = ima_calc_field_array_hash(&entry->template_data[0],
+							entry);
 			if (ret < 0) {
 				pr_err("cannot calculate template digest\n");
 				ret = -EINVAL;

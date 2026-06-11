@@ -575,7 +575,7 @@ out:
 /*
  * Calculate the hash of template data
  */
-static int ima_calc_field_array_hash_tfm(struct ima_field_data *field_data,
+int ima_calc_field_array_hash_tfm(struct ima_field_data *field_data,
 					 struct ima_template_entry *entry,
 					 int tfm_idx)
 {
