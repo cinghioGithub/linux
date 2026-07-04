@@ -430,6 +430,7 @@ int ima_restore_measurement_list(loff_t size, void *buf)
 	DECLARE_BITMAP(hdr_mask, HDR__LAST);
 	unsigned long count = 0;
 	int ret = 0;
+	int i;
 
 	if (!buf || size < sizeof(*khdr))
 		return 0;
@@ -515,15 +516,27 @@ int ima_restore_measurement_list(loff_t size, void *buf)
 		if (ret < 0)
 			break;
 
-		if (memcmp(hdr[HDR_DIGEST].data, zero, sizeof(zero))) {
-			ret = ima_calc_field_array_hash(
-						&entry->template_data[0],
+		ret = ima_calc_field_array_hash(&entry->template_data[0],
 						entry);
-			if (ret < 0) {
-				pr_err("cannot calculate template digest\n");
-				ret = -EINVAL;
-				break;
+		if (ret < 0) {
+			pr_err("cannot calculate template digest\n");
+			ret = -EINVAL;
+			break;
+		}
+
+		/* 
+		 * Check if the current measurement is a violation as reported
+		 * in the kexec buffer. In case it is, revert the effect of
+		 * ima_calc_field_array_hash(), setting all the calculated
+		 * digests to zero, and update the violations counter.
+		 */
+		if (!memcmp(hdr[HDR_DIGEST].data, zero, sizeof(zero)) &&
+		    memcmp(entry->digests[ima_sha1_idx].digest, zero, sizeof(zero))) {
+			for (i = 0; i < NR_BANKS(ima_tpm_chip) + ima_extra_slots; i++) {
+				memset(entry->digests[i].digest, 0,
+				       ARRAY_SIZE(entry->digests[i].digest));
 			}
+			atomic_long_inc(&ima_htable.violations);
 		}
 
 		entry->pcr = !ima_canonical_fmt ? *(u32 *)(hdr[HDR_PCR].data) :
