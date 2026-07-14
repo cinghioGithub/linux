@@ -54,6 +54,9 @@ enum tpm_algorithms {
 	TPM_ALG_NULL		= 0x0010,
 	TPM_ALG_SM3_256		= 0x0012,
 	TPM_ALG_ECC		= 0x0023,
+	TPM_ALG_SHA3_256	= 0x0027,
+	TPM_ALG_SHA3_384	= 0x0028,
+	TPM_ALG_SHA3_512	= 0x0029,
 	TPM_ALG_CFB		= 0x0043,
 };
 
@@ -61,7 +64,7 @@ enum tpm_algorithms {
  * maximum number of hashing algorithms a TPM can have.  This is
  * basically a count of every hash in tpm_algorithms above
  */
-#define TPM_MAX_HASHES	5
+#define TPM_MAX_HASHES	8
 
 enum tpm2_curves {
 	TPM2_ECC_NONE		= 0x0000,
