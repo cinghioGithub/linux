@@ -82,9 +82,9 @@ void selinux_ima_measure_state_locked(void)
 		return;
 	}
 
-	ima_measure_critical_data("selinux", "selinux-state",
-				  state_str, strlen(state_str), false,
-				  NULL, 0);
+	ima_measure_critical_data(ima_critical_data_labels[CD_SELINUX],
+				  "selinux-state", state_str, strlen(state_str),
+				  false, NULL, 0);
 
 	kfree(state_str);
 
@@ -100,9 +100,9 @@ void selinux_ima_measure_state_locked(void)
 		return;
 	}
 
-	ima_measure_critical_data("selinux", "selinux-policy-hash",
-				  policy, policy_len, true,
-				  NULL, 0);
+	ima_measure_critical_data(ima_critical_data_labels[CD_SELINUX],
+				  "selinux-policy-hash", policy, policy_len,
+				  true, NULL, 0);
 
 	vfree(policy);
 }
