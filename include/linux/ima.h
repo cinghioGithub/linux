@@ -13,7 +13,19 @@
 #include <linux/kexec.h>
 #include <linux/secure_boot.h>
 #include <crypto/hash_info.h>
+#include <linux/device-mapper.h>
 struct linux_binprm;
+
+enum critical_data_labels {
+	CD_DM_NAME,
+	CD_KERNEL_INFO,
+	CD_IMA_KEXEC,
+	CD_MODULES,
+	CD_SELINUX,
+	CD_LABEL__LAST,
+};
+
+extern char *ima_critical_data_labels[] __ro_after_init;
 
 #ifdef CONFIG_IMA
 extern enum hash_algo ima_get_current_hash_algo(void);

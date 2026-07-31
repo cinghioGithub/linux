@@ -50,7 +50,9 @@ void ima_measure_kexec_event(const char *event_name)
 		      "ima_runtime_measurements_count=%ld;",
 		      kexec_segment_size, buf_size, len);
 
-	ima_measure_critical_data("ima_kexec", event_name, ima_kexec_event, n, false, NULL, 0);
+	ima_measure_critical_data(ima_critical_data_labels[CD_IMA_KEXEC],
+				  event_name, ima_kexec_event, n, false,
+				  NULL, 0);
 }
 
 static int ima_alloc_kexec_file_buf(size_t segment_size)

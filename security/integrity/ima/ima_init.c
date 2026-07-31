@@ -159,9 +159,9 @@ int __init ima_init(void)
 
 	ima_init_reboot_notifier();
 
-	ima_measure_critical_data("kernel_info", "kernel_version",
-				  UTS_RELEASE, strlen(UTS_RELEASE), false,
-				  NULL, 0);
+	ima_measure_critical_data(ima_critical_data_labels[CD_KERNEL_INFO],
+				  "kernel_version", UTS_RELEASE,
+				  strlen(UTS_RELEASE), false, NULL, 0);
 
 	return rc;
 }

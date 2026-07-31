@@ -57,6 +57,14 @@ int ima_policy_flag;
 static int temp_ima_appraise;
 static int build_ima_appraise __ro_after_init;
 
+char *ima_critical_data_labels[] __ro_after_init = {
+	DM_NAME,
+	"kernel-info",
+	"ima-kexec",
+	"modules",
+	"selinux",
+};
+
 atomic_t ima_setxattr_allowed_hash_algorithms;
 
 #define MAX_LSM_RULES 6
@@ -1253,6 +1261,24 @@ static void check_template_field(const struct ima_template_desc *template,
 	pr_notice_once("%s", msg);
 }
 
+static bool check_critical_data_label(const struct ima_rule_opt_list *opt_list)
+{
+	int i, j;
+
+	for (i = 0; i < opt_list->count; i++) {
+		for (j = 0; j < CD_LABEL__LAST; j++) {
+			if (!strcmp(opt_list->items[i],
+				    ima_critical_data_labels[j]))
+				break;
+		}
+
+		if (j == CD_LABEL__LAST)
+			return false;
+	}
+
+	return true;
+}
+
 static bool ima_validate_rule(struct ima_rule_entry *entry)
 {
 	/* Ensure that the action is set and is compatible with the flags */
@@ -1351,6 +1377,10 @@ static bool ima_validate_rule(struct ima_rule_entry *entry)
 			return false;
 
 		if (ima_rule_contains_lsm_cond(entry))
+			return false;
+
+		if ((entry->flags & IMA_LABEL) &&
+				       !check_critical_data_label(entry->label))
 			return false;
 
 		break;

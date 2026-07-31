@@ -1032,8 +1032,9 @@ static int ima_post_load_data(char *buf, loff_t size,
 	 * Measure the init_module syscall buffer containing the ELF image.
 	 */
 	if (load_id == LOADING_MODULE)
-		ima_measure_critical_data("modules", "init_module",
-					  buf, size, true, NULL, 0);
+		ima_measure_critical_data(ima_critical_data_labels[CD_MODULES],
+					  "init_module", buf, size, true,
+					  NULL, 0);
 
 	return 0;
 }
